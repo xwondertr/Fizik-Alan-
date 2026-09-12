@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fizik Alanı</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<style>
+  :root{
+    --bg-deep:#0d1117;
+    --bg-panel:#141b24;
+    --line:#233041;
+    --accent:#5ec8d8;
+    --accent-warm:#e8a355;
+    --text:#dbe6ef;
+    --text-dim:#7f93a6;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    background:var(--bg-deep);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color:var(--text);
+  }
+  #canvas-wrap{
+    position:absolute; inset:0;
+  }
+  canvas{ display:block; touch-action:none; }
+
+  #toolbar{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+    padding:10px 14px;
+    background:linear-gradient(180deg, rgba(20,27,36,0.96), rgba(20,27,36,0.85));
+    border-bottom:1px solid var(--line);
+    backdrop-filter: blur(6px);
+    z-index:10;
+  }
+  .group{
+    display:flex; align-items:center; gap:6px;
+    padding:4px 8px;
+    border-right:1px solid var(--line);
+  }
+  .group:last-child{ border-right:none; }
+
+  button{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:7px 12px;
+    border-radius:6px;
+    font-size:13px;
+    cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    transition:border-color .15s, transform .08s;
+  }
+  button:hover{ border-color:var(--accent); }
+  button:active{ transform:scale(0.96); }
+  button.danger:hover{ border-color:#e06060; color:#ff9d9d; }
+
+  .shape-icon{ width:14px; height:14px; display:inline-block; }
+
+  .slider-block{
+    display:flex; flex-direction:column; gap:2px; min-width:130px;
+  }
+  .slider-block label{
+    font-size:11px; color:var(--text-dim); display:flex; justify-content:space-between;
+  }
+  .slider-block .val{ color:var(--accent); font-variant-numeric:tabular-nums; }
+  input[type=range]{
+    width:100%; accent-color:var(--accent);
+    height:4px;
+  }
+
+  #hint{
+    position:absolute; bottom:12px; left:14px;
+    font-size:12px; color:var(--text-dim);
+    background:rgba(20,27,36,0.7);
+    padding:6px 10px; border-radius:6px;
+    border:1px solid var(--line);
+    z-index:10;
+    pointer-events:none;
+    max-width:280px;
+    line-height:1.5;
+  }
+
+  #counter{
+    position:absolute; bottom:12px; right:14px;
+    font-size:12px; color:var(--text-dim);
+    background:rgba(20,27,36,0.7);
+    padding:6px 10px; border-radius:6px;
+    border:1px solid var(--line);
+    z-index:10;
+  }
+  #counter span{ color:var(--accent-warm); font-weight:600; }
+
+  /* ---- start screen ---- */
+  #start-screen{
+    position:absolute; inset:0; z-index:100;
+    display:flex; align-items:center; justify-content:center;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(94,200,216,0.10), transparent 55%),
+      radial-gradient(circle at 75% 80%, rgba(232,163,85,0.08), transparent 50%),
+      var(--bg-deep);
+  }
+  #start-card{
+    max-width:440px;
+    width:88%;
+    padding:34px 30px 26px;
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  }
+  #start-card .glyph{
+    width:52px; height:52px; margin:0 auto 18px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:12px;
+    background:linear-gradient(145deg, rgba(94,200,216,0.18), rgba(94,200,216,0.04));
+    border:1px solid var(--line);
+  }
+  #start-card h1{
+    font-size:22px; margin:0 0 12px;
+    letter-spacing:0.2px;
+    color:var(--text);
+  }
+  #start-card p{
+    font-size:14px; line-height:1.65;
+    color:var(--text-dim);
+    margin:0 0 26px;
+  }
+  #start-btn{
+    width:100%;
+    padding:12px 0;
+    background:var(--accent);
+    color:#0d1117;
+    border:none;
+    border-radius:8px;
+    font-size:15px;
+    font-weight:600;
+    text-align:center;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition:filter .15s, transform .08s;
+  }
+  #start-btn:hover{ filter:brightness(1.08); }
+  #start-btn:active{ transform:scale(0.98); }
+  #start-credit{
+    margin-top:18px;
+    font-size:11.5px;
+    color:var(--text-dim);
+    opacity:0.75;
+  }
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <div id="start-card">
+    <div class="glyph">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#5ec8d8" stroke-width="1.6">
+        <circle cx="8" cy="8" r="4"/>
+        <rect x="13" y="12" width="8" height="8" rx="1"/>
+      </svg>
+    </div>
+    <h1>Fizik Alanı</h1>
+    <p>
+      Bu araç, yerçekimi altında çarpışan, zıplayan ve devrilen küreler, kutular ve
+      silindirlerle deney yapabileceğiniz interaktif bir 3D fizik oyun alanıdır.
+      Şekiller ekleyin, yerçekimini ve esnekliği ayarlayın, cisimleri sürükleyip
+      fırlatarak simülasyonla anlık olarak etkileşime geçin.
+    </p>
+    <button id="start-btn">Başlat</button>
+    <div id="start-credit">Bu program Emir Tunç tarafından yapay zeka ile geliştirildi, hâlâ gelişmeye devam ediyor.</div>
+  </div>
+</div>
+
+<div id="canvas-wrap"></div>
+
+<div id="toolbar">
+  <div class="group">
+    <button id="add-sphere" title="Küre ekle">
+      <svg class="shape-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><ellipse cx="12" cy="12" rx="9" ry="3.2" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      Küre
+    </button>
+    <button id="add-box" title="Kutu ekle">
+      <svg class="shape-icon" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="13" fill="none" stroke="currentColor" stroke-width="1.6"/><polygon points="4,7 8,4 20,4 16,7" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="20" y1="4" x2="20" y2="17" stroke="currentColor" stroke-width="1"/></svg>
+      Kutu
+    </button>
+    <button id="add-cylinder" title="Silindir ekle">
+      <svg class="shape-icon" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 6 v11 a7 2.6 0 0 0 14 0 v-11" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      Silindir
+    </button>
+  </div>
+
+  <div class="group">
+    <button id="clear-all" class="danger" title="Tüm cisimleri kaldır">
+      <svg class="shape-icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      Alanı Temizle
+    </button>
+  </div>
+
+  <div class="group">
+    <div class="slider-block">
+      <label>Yerçekimi <span class="val" id="gravity-val">-9.8</span></label>
+      <input type="range" id="gravity" min="-30" max="-1" step="0.5" value="-9.8">
+    </div>
+    <div class="slider-block">
+      <label>Esneklik (Zıplama) <span class="val" id="bounce-val">0.55</span></label>
+      <input type="range" id="bounce" min="0" max="1" step="0.05" value="0.55">
+    </div>
+  </div>
+</div>
+
+<div id="hint">Sürüklemek için bir cismin üzerine tıklayıp hareket ettirin. Boş alana tıklayıp sürükleyerek kamerayı döndürün, tekerlekle yakınlaştırın.</div>
+<div id="counter">Cisim: <span id="count">0</span></div>
+
+<script>
+(function(){
+  // ---------- Three.js setup ----------
+  const wrap = document.getElementById('canvas-wrap');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0d1117);
+  scene.fog = new THREE.Fog(0x0d1117, 20, 55);
+
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 200);
+  const renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  wrap.appendChild(renderer.domElement);
+
+  // lights
+  const hemi = new THREE.HemisphereLight(0x8fb8d8, 0x11151c, 0.7);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xfff2df, 0.9);
+  dir.position.set(10, 18, 8);
+  dir.castShadow = true;
+  dir.shadow.mapSize.set(2048, 2048);
+  dir.shadow.camera.left = -16;
+  dir.shadow.camera.right = 16;
+  dir.shadow.camera.top = 16;
+  dir.shadow.camera.bottom = -16;
+  dir.shadow.camera.far = 40;
+  scene.add(dir);
+  const rim = new THREE.DirectionalLight(0x5ec8d8, 0.25);
+  rim.position.set(-8, 6, -10);
+  scene.add(rim);
+
+  // arena bounds
+  const ARENA = 8; // half-size
+  const WALL_H = 9;
+
+  // floor
+  const floorGeo = new THREE.PlaneGeometry(ARENA*2, ARENA*2, 1, 1);
+  const floorMat = new THREE.MeshStandardMaterial({ color:0x1b232e, roughness:0.95, metalness:0.05 });
+  const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+  floorMesh.rotation.x = -Math.PI/2;
+  floorMesh.receiveShadow = true;
+  scene.add(floorMesh);
+
+  const grid = new THREE.GridHelper(ARENA*2, 20, 0x2c3b4d, 0x1c2530);
+  grid.position.y = 0.01;
+  scene.add(grid);
+
+  // transparent walls (visual)
+  const wallMat = new THREE.MeshBasicMaterial({ color:0x5ec8d8, transparent:true, opacity:0.06, side:THREE.DoubleSide });
+  const wallDefs = [
+    { pos:[0, WALL_H/2, -ARENA], rot:[0,0,0] },
+    { pos:[0, WALL_H/2,  ARENA], rot:[0,Math.PI,0] },
+    { pos:[-ARENA, WALL_H/2, 0], rot:[0,Math.PI/2,0] },
+    { pos:[ ARENA, WALL_H/2, 0], rot:[0,-Math.PI/2,0] },
+  ];
+  wallDefs.forEach(w=>{
+    const g = new THREE.PlaneGeometry(ARENA*2, WALL_H);
+    const m = new THREE.Mesh(g, wallMat);
+    m.position.set(...w.pos);
+    m.rotation.set(...w.rot);
+    scene.add(m);
+  });
+
+  // camera orbit state
+  let camTarget = new THREE.Vector3(0, 2.5, 0);
+  let camRadius = 20, camTheta = Math.PI/4, camPhi = 1.0;
+  function updateCamera(){
+    const x = camTarget.x + camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+    const y = camTarget.y + camRadius * Math.cos(camPhi);
+    const z = camTarget.z + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+    camera.position.set(x,y,z);
+    camera.lookAt(camTarget);
+  }
+  updateCamera();
+
+  // ---------- Cannon.js setup ----------
+  const world = new CANNON.World();
+  world.gravity.set(0, -9.8, 0);
+  world.broadphase = new CANNON.SAPBroadphase(world);
+  world.solver.iterations = 12;
+  world.allowSleep = true;
+
+  const defaultMat = new CANNON.Material('default');
+  let contactMat = new CANNON.ContactMaterial(defaultMat, defaultMat, {
+    friction: 0.4,
+    restitution: 0.55
+  });
+  world.addContactMaterial(contactMat);
+  world.defaultContactMaterial = contactMat;
+
+  function rebuildContactMaterial(restitution){
+    // cannon.js 0.6.2 has no removeContactMaterial; mutate the existing one instead
+    contactMat.restitution = restitution;
+  }
+
+  // ground body
+  const groundBody = new CANNON.Body({ mass:0, material:defaultMat });
+  groundBody.addShape(new CANNON.Plane());
+  groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
+  world.addBody(groundBody);
+
+  // wall bodies (static)
+  function addWallBody(px,py,pz, nx,ny,nz){
+    const b = new CANNON.Body({ mass:0, material:defaultMat });
+    b.addShape(new CANNON.Plane());
+    b.position.set(px,py,pz);
+    const normal = new THREE.Vector3(nx,ny,nz);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), normal);
+    b.quaternion.set(q.x,q.y,q.z,q.w);
+    world.addBody(b);
+  }
+  addWallBody(0, WALL_H/2, -ARENA, 0,0,1);
+  addWallBody(0, WALL_H/2,  ARENA, 0,0,-1);
+  addWallBody(-ARENA, WALL_H/2, 0, 1,0,0);
+  addWallBody(ARENA, WALL_H/2, 0, -1,0,0);
+
+  // ---------- object bookkeeping ----------
+  const objects = []; // { mesh, body }
+  const countEl = document.getElementById('count');
+
+  function randColor(){
+    const h = Math.random();
+    const c = new THREE.Color();
+    c.setHSL(h, 0.55, 0.58);
+    return c;
+  }
+
+  function spawnPos(){
+    const margin = ARENA * 0.5;
+    return {
+      x: (Math.random()*2-1)*margin,
+      y: 7 + Math.random()*2,
+      z: (Math.random()*2-1)*margin
+    };
+  }
+
+  function addSphere(){
+    const r = 0.35 + Math.random()*0.25;
+    const geo = new THREE.SphereGeometry(r, 24, 18);
+    const mat = new THREE.MeshStandardMaterial({ color:randColor(), roughness:0.4, metalness:0.15 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    const p = spawnPos();
+    const body = new CANNON.Body({ mass: r*r*r*8, material: defaultMat, shape: new CANNON.Sphere(r) });
+    body.position.set(p.x, p.y, p.z);
+    body.angularVelocity.set((Math.random()-0.5)*2,(Math.random()-0.5)*2,(Math.random()-0.5)*2);
+    body.linearDamping = 0.01;
+    body.angularDamping = 0.2;
+    world.addBody(body);
+
+    objects.push({ mesh, body });
+    updateCount();
+  }
+
+  function addBox(){
+    const s = 0.55 + Math.random()*0.35;
+    const geo = new THREE.BoxGeometry(s, s, s);
+    const mat = new THREE.MeshStandardMaterial({ color:randColor(), roughness:0.55, metalness:0.1 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    const p = spawnPos();
+    const half = s/2;
+    const body = new CANNON.Body({ mass: s*s*s*6, material: defaultMat, shape: new CANNON.Box(new CANNON.Vec3(half,half,half)) });
+    body.position.set(p.x, p.y, p.z);
+    body.quaternion.setFromEuler(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+    body.angularVelocity.set((Math.random()-0.5)*2,(Math.random()-0.5)*2,(Math.random()-0.5)*2);
+    body.linearDamping = 0.01;
+    body.angularDamping = 0.2;
+    world.addBody(body);
+
+    objects.push({ mesh, body });
+    updateCount();
+  }
+
+  function addCylinder(){
+    const r = 0.35 + Math.random()*0.2;
+    const h = 0.7 + Math.random()*0.5;
+    const geo = new THREE.CylinderGeometry(r, r, h, 20);
+    const mat = new THREE.MeshStandardMaterial({ color:randColor(), roughness:0.5, metalness:0.12 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    const p = spawnPos();
+    const shape = new CANNON.Cylinder(r, r, h, 16);
+    const body = new CANNON.Body({ mass: r*r*h*10, material: defaultMat });
+    // cannon cylinder is aligned along Y by default matching three's, but cannon's local axis is Z historically;
+    // apply a quaternion to align properly
+    const quat = new CANNON.Quaternion();
+    quat.setFromAxisAngle(new CANNON.Vec3(1,0,0), Math.PI/2);
+    body.addShape(shape, new CANNON.Vec3(), quat);
+    body.position.set(p.x, p.y, p.z);
+    body.quaternion.setFromEuler(0, Math.random()*Math.PI, 0);
+    body.angularVelocity.set((Math.random()-0.5)*2,(Math.random()-0.5)*2,(Math.random()-0.5)*2);
+    body.linearDamping = 0.01;
+    body.angularDamping = 0.2;
+    world.addBody(body);
+
+    objects.push({ mesh, body });
+    updateCount();
+  }
+
+  function clearAll(){
+    objects.forEach(o=>{
+      scene.remove(o.mesh);
+      world.removeBody(o.body);
+    });
+    objects.length = 0;
+    updateCount();
+  }
+
+  function updateCount(){
+    countEl.textContent = objects.length;
+  }
+
+  document.getElementById('add-sphere').addEventListener('click', addSphere);
+  document.getElementById('add-box').addEventListener('click', addBox);
+  document.getElementById('add-cylinder').addEventListener('click', addCylinder);
+  document.getElementById('clear-all').addEventListener('click', clearAll);
+
+  // sliders
+  const gravitySlider = document.getElementById('gravity');
+  const gravityVal = document.getElementById('gravity-val');
+  gravitySlider.addEventListener('input', ()=>{
+    const g = parseFloat(gravitySlider.value);
+    world.gravity.set(0, g, 0);
+    gravityVal.textContent = g.toFixed(1);
+  });
+
+  const bounceSlider = document.getElementById('bounce');
+  const bounceVal = document.getElementById('bounce-val');
+  bounceSlider.addEventListener('input', ()=>{
+    const b = parseFloat(bounceSlider.value);
+    rebuildContactMaterial(b);
+    bounceVal.textContent = b.toFixed(2);
+  });
+
+  // simulation starts only after the user dismisses the start screen
+  let simulationStarted = false;
+  document.getElementById('start-btn').addEventListener('click', ()=>{
+    const screen = document.getElementById('start-screen');
+    screen.style.transition = 'opacity .35s ease';
+    screen.style.opacity = '0';
+    setTimeout(()=>{ screen.style.display = 'none'; }, 350);
+    if (!simulationStarted){
+      simulationStarted = true;
+      addSphere(); addBox(); addCylinder(); addSphere(); addBox();
+    }
+  });
+
+  // ---------- pointer interaction: drag objects OR orbit camera ----------
+  const raycaster = new THREE.Raycaster();
+  const pointerNDC = new THREE.Vector2();
+  let isDown = false;
+  let mode = null; // 'drag' | 'orbit'
+  let dragged = null; // {mesh, body}
+  let dragPlane = new THREE.Plane();
+  let dragOffset = new THREE.Vector3();
+  let lastPointer = { x:0, y:0, t:0 };
+  let lastWorldPoint = new THREE.Vector3();
+  let velocitySample = new THREE.Vector3();
+
+  function setPointerNDC(e){
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  function onPointerDown(e){
+    isDown = true;
+    setPointerNDC(e);
+    raycaster.setFromCamera(pointerNDC, camera);
+    const meshes = objects.map(o=>o.mesh);
+    const hits = raycaster.intersectObjects(meshes);
+    if (hits.length > 0){
+      mode = 'drag';
+      const hitMesh = hits[0].object;
+      const obj = objects.find(o=>o.mesh === hitMesh);
+      dragged = obj;
+      dragged.body.type = CANNON.Body.KINEMATIC;
+      dragged.body.velocity.set(0,0,0);
+      dragged.body.angularVelocity.set(0,0,0);
+
+      const camDir = new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      dragPlane.setFromNormalAndCoplanarPoint(camDir, hits[0].point);
+      dragOffset.copy(hits[0].point).sub(dragged.mesh.position);
+      lastWorldPoint.copy(hits[0].point);
+      velocitySample.set(0,0,0);
+    } else {
+      mode = 'orbit';
+    }
+    lastPointer = { x:e.clientX, y:e.clientY, t:performance.now() };
+  }
+
+  function onPointerMove(e){
+    if (!isDown) return;
+    if (mode === 'orbit'){
+      const dx = e.clientX - lastPointer.x;
+      const dy = e.clientY - lastPointer.y;
+      camTheta -= dx * 0.006;
+      camPhi -= dy * 0.006;
+      camPhi = Math.max(0.25, Math.min(Math.PI/2 - 0.02, camPhi));
+      updateCamera();
+      lastPointer = { x:e.clientX, y:e.clientY, t:performance.now() };
+    } else if (mode === 'drag' && dragged){
+      setPointerNDC(e);
+      raycaster.setFromCamera(pointerNDC, camera);
+      const pt = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(dragPlane, pt)){
+        const target = pt.clone().sub(dragOffset);
+        // clamp within arena and above floor
+        target.x = Math.max(-ARENA+0.4, Math.min(ARENA-0.4, target.x));
+        target.z = Math.max(-ARENA+0.4, Math.min(ARENA-0.4, target.z));
+        target.y = Math.max(0.4, Math.min(WALL_H-0.4, target.y));
+
+        const now = performance.now();
+        const dt = Math.max((now - lastPointer.t)/1000, 0.001);
+        velocitySample.copy(target).sub(lastWorldPoint).divideScalar(dt);
+
+        dragged.body.position.set(target.x, target.y, target.z);
+        lastWorldPoint.copy(target);
+        lastPointer.t = now;
+      }
+    }
+  }
+
+  function onPointerUp(){
+    if (mode === 'drag' && dragged){
+      dragged.body.type = CANNON.Body.DYNAMIC;
+      dragged.body.velocity.set(
+        Math.max(-12, Math.min(12, velocitySample.x)),
+        Math.max(-12, Math.min(12, velocitySample.y)),
+        Math.max(-12, Math.min(12, velocitySample.z))
+      );
+      dragged.body.wakeUp();
+    }
+    isDown = false;
+    mode = null;
+    dragged = null;
+  }
+
+  function onWheel(e){
+    e.preventDefault();
+    camRadius += e.deltaY * 0.015;
+    camRadius = Math.max(6, Math.min(45, camRadius));
+    updateCamera();
+  }
+
+  const dom = renderer.domElement;
+  dom.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  dom.addEventListener('wheel', onWheel, { passive:false });
+
+  // ---------- resize ----------
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ---------- stable fixed-timestep simulation loop ----------
+  const FIXED_DT = 1/60;
+  let lastTime = performance.now();
+
+  function animate(){
+    requestAnimationFrame(animate);
+    const now = performance.now();
+    let delta = (now - lastTime) / 1000;
+    lastTime = now;
+    delta = Math.min(delta, 0.1); // avoid spiral of death on tab-switch
+
+    if (!simulationStarted){
+      renderer.render(scene, camera);
+      return;
+    }
+
+    world.step(FIXED_DT, delta, 5);
+
+    // remove objects that somehow fell through / flew away
+    for (let i = objects.length - 1; i >= 0; i--){
+      const o = objects[i];
+      if (o.body.position.y < -15){
+        scene.remove(o.mesh);
+        world.removeBody(o.body);
+        objects.splice(i,1);
+        updateCount();
+        continue;
+      }
+      o.mesh.position.copy(o.body.position);
+      o.mesh.quaternion.copy(o.body.quaternion);
+    }
+
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+</script>
+</body>
+</html>
